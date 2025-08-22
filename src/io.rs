@@ -52,3 +52,10 @@ pub fn get_paste(entries: &PasteStore, id: &str) -> Option<Bytes> {
     // need to box the guard until owning_ref understands Pin is a stable address
     entries.read().get(id).cloned()
 }
+
+/// Get all paste IDs.
+pub fn get_all_paste_ids(entries: &PasteStore) -> Vec<String> {
+    let mut ids: Vec<String> = entries.read().keys().cloned().collect();
+    ids.reverse();
+    ids
+}

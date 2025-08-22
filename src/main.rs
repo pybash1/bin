@@ -9,7 +9,7 @@ mod params;
 use crate::{
     errors::{InternalServerError, NotFound},
     highlight::highlight,
-    io::{PasteStore, generate_id, get_paste, store_paste},
+    io::{PasteStore, generate_id, get_all_paste_ids, get_paste, store_paste},
     params::{HostHeader, IsPlaintextRequest},
 };
 
@@ -64,6 +64,7 @@ async fn main() -> std::io::Result<()> {
                 .app_data(FormConfig::default().limit(args.max_paste_size))
                 .wrap(actix_web::middleware::Compress::default())
                 .route("/", web::get().to(index))
+                .route("/all", web::get().to(list_all_pastes))
                 .route("/", web::post().to(submit))
                 .route("/", web::put().to(submit_raw))
                 .route("/", web::head().to(HttpResponse::MethodNotAllowed))
@@ -88,6 +89,11 @@ struct Index;
 
 async fn index(req: HttpRequest) -> Result<HttpResponse, Error> {
     render_template(&req, &Index)
+}
+
+async fn list_all_pastes(store: Data<PasteStore>) -> Result<HttpResponse, Error> {
+    let paste_ids = get_all_paste_ids(&store);
+    Ok(HttpResponse::Ok().json(paste_ids))
 }
 
 #[derive(serde::Deserialize)]
