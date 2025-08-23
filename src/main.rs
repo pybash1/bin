@@ -2,7 +2,6 @@
 #![allow(clippy::unused_async)]
 
 mod errors;
-mod highlight;
 mod io;
 mod params;
 
@@ -18,11 +17,7 @@ use actix_web::{
     web::{self, Bytes, Data, FormConfig, PayloadConfig},
 };
 use log::{error, info};
-use std::{
-    net::{IpAddr, Ipv4Addr, SocketAddr},
-    sync::LazyLock,
-};
-use syntect::html::{ClassStyle, css_for_theme_with_class_style};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
 #[derive(argh::FromArgs, Clone)]
 /// a pastebin.
@@ -66,7 +61,6 @@ async fn main() -> std::io::Result<()> {
                 .route("/", web::post().to(submit))
                 .route("/", web::put().to(submit_raw))
                 .route("/", web::head().to(HttpResponse::MethodNotAllowed))
-                .route("/highlight.css", web::get().to(highlight_css))
                 .route("/{paste}", web::get().to(show_paste))
                 .route("/{paste}", web::head().to(HttpResponse::MethodNotAllowed))
                 .default_service(web::to(|req: HttpRequest| async move {
@@ -180,18 +174,4 @@ async fn show_paste(
         .body(entry))
 }
 
-async fn highlight_css() -> HttpResponse {
-    static CSS: LazyLock<Bytes> = LazyLock::new(|| {
-        highlight::BAT_ASSETS.with(|s| {
-            Bytes::from(
-                css_for_theme_with_class_style(s.get_theme("OneHalfDark"), ClassStyle::Spaced)
-                    .unwrap(),
-            )
-        })
-    });
-
-    HttpResponse::Ok()
-        .content_type("text/css")
-        .body(CSS.clone())
-}
 

@@ -19,8 +19,6 @@ rand = { version = "0.9" }
 gpw = "0.1"
 actix = "0.13"
 actix-web = "4.4"
-bat = "0.25"
-syntect = "5.1"
 tokio = { version = "1.35", features = ["sync"] }
 futures = "0.3"
 time = "0.3.36"
