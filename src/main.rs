@@ -7,10 +7,9 @@ mod io;
 mod params;
 
 use crate::{
-    errors::{InternalServerError, NotFound},
-    highlight::highlight,
+    errors::NotFound,
     io::{PasteStore, generate_id, get_all_paste_ids, get_paste, store_paste},
-    params::{HostHeader, IsPlaintextRequest},
+    params::HostHeader,
 };
 
 use actix_web::{
@@ -18,7 +17,6 @@ use actix_web::{
     http::header,
     web::{self, Bytes, Data, FormConfig, PayloadConfig},
 };
-use askama::Template;
 use log::{error, info};
 use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr},
@@ -83,12 +81,51 @@ async fn main() -> std::io::Result<()> {
     server.bind(args.bind_addr)?.run().await
 }
 
-#[derive(Template)]
-#[template(path = "index.html")]
-struct Index;
+#[derive(serde::Serialize)]
+struct IndexResponse {
+    message: String,
+    endpoints: Vec<ApiEndpoint>,
+}
 
-async fn index(req: HttpRequest) -> Result<HttpResponse, Error> {
-    render_template(&req, &Index)
+#[derive(serde::Serialize)]
+struct ApiEndpoint {
+    method: String,
+    path: String,
+    description: String,
+}
+
+async fn index() -> Result<HttpResponse, Error> {
+    let response = IndexResponse {
+        message: "Bin API - A pastebin service".to_string(),
+        endpoints: vec![
+            ApiEndpoint {
+                method: "GET".to_string(),
+                path: "/".to_string(),
+                description: "Get API information".to_string(),
+            },
+            ApiEndpoint {
+                method: "POST".to_string(),
+                path: "/".to_string(),
+                description: "Create a new paste (form data)".to_string(),
+            },
+            ApiEndpoint {
+                method: "PUT".to_string(),
+                path: "/".to_string(),
+                description: "Create a new paste (raw data)".to_string(),
+            },
+            ApiEndpoint {
+                method: "GET".to_string(),
+                path: "/all".to_string(),
+                description: "Get all paste IDs".to_string(),
+            },
+            ApiEndpoint {
+                method: "GET".to_string(),
+                path: "/{paste}".to_string(),
+                description: "Get paste content by ID".to_string(),
+            },
+        ],
+    };
+    Ok(HttpResponse::Ok().json(response))
 }
 
 async fn list_all_pastes(store: Data<PasteStore>) -> Result<HttpResponse, Error> {
@@ -127,47 +164,20 @@ async fn submit_raw(
     Ok(uri)
 }
 
-#[derive(Template)]
-#[template(path = "paste.html")]
-struct ShowPaste {
-    content: String,
-}
 
 async fn show_paste(
-    req: HttpRequest,
     key: actix_web::web::Path<String>,
-    plaintext: IsPlaintextRequest,
     store: Data<PasteStore>,
 ) -> Result<HttpResponse, Error> {
     let mut splitter = key.splitn(2, '.');
     let key = splitter.next().unwrap();
-    let ext = splitter.next();
+    let _ext = splitter.next();
 
     let entry = get_paste(&store, key).ok_or(NotFound)?;
 
-    if *plaintext {
-        Ok(HttpResponse::Ok()
-            .content_type("text/plain; charset=utf-8")
-            .body(entry))
-    } else {
-        let data = std::str::from_utf8(entry.as_ref())?;
-
-        let code_highlighted = match ext {
-            Some(extension) => match highlight(data, extension) {
-                Some(html) => html,
-                None => return Err(NotFound.into()),
-            },
-            None => htmlescape::encode_minimal(data),
-        };
-
-        // Add <code> tags to enable line numbering with CSS
-        let content = format!(
-            "<code>{}</code>",
-            code_highlighted.replace('\n', "</code><code>")
-        );
-
-        render_template(&req, &ShowPaste { content })
-    }
+    Ok(HttpResponse::Ok()
+        .content_type("text/plain; charset=utf-8")
+        .body(entry))
 }
 
 async fn highlight_css() -> HttpResponse {
@@ -185,12 +195,3 @@ async fn highlight_css() -> HttpResponse {
         .body(CSS.clone())
 }
 
-fn render_template<T: Template>(req: &HttpRequest, template: &T) -> Result<HttpResponse, Error> {
-    match template.render() {
-        Ok(html) => Ok(HttpResponse::Ok().content_type("text/html").body(html)),
-        Err(e) => {
-            error!("Error while rendering template for {}: {e}", req.uri());
-            Err(InternalServerError(Box::new(e)).into())
-        }
-    }
-}

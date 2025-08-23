@@ -1,24 +1,28 @@
-use actix_web::{HttpResponse, ResponseError, body::BoxBody, http::StatusCode, http::header, web};
+use actix_web::{HttpResponse, ResponseError, http::StatusCode};
+use serde::Serialize;
+use std::fmt::Formatter;
 
-use std::fmt::{Formatter, Write};
+#[derive(Serialize)]
+struct ErrorResponse {
+    error: String,
+    status: u16,
+}
 
-macro_rules! impl_response_error_for_http_resp {
-    ($ty:ty, $path:expr, $status:expr) => {
+macro_rules! impl_response_error_for_json {
+    ($ty:ty, $message:expr, $status:expr) => {
         impl ResponseError for $ty {
             fn error_response(&self) -> HttpResponse {
-                HtmlResponseError::error_response(self)
+                let error_response = ErrorResponse {
+                    error: $message.to_string(),
+                    status: $status.as_u16(),
+                };
+                HttpResponse::build($status).json(error_response)
             }
         }
 
         impl std::fmt::Display for $ty {
             fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-                write!(f, "{}", include_str!($path))
-            }
-        }
-
-        impl HtmlResponseError for $ty {
-            fn status_code(&self) -> StatusCode {
-                $status
+                write!(f, "{}", $message)
             }
         }
     };
@@ -27,31 +31,15 @@ macro_rules! impl_response_error_for_http_resp {
 #[derive(Debug)]
 pub struct NotFound;
 
-impl_response_error_for_http_resp!(NotFound, "../templates/404.html", StatusCode::NOT_FOUND);
+impl_response_error_for_json!(NotFound, "Not Found", StatusCode::NOT_FOUND);
 
 #[derive(Debug)]
 #[allow(dead_code)]
 pub struct InternalServerError(pub Box<dyn std::error::Error>);
 
-impl_response_error_for_http_resp!(
+impl_response_error_for_json!(
     InternalServerError,
-    "../templates/500.html",
+    "Internal Server Error",
     StatusCode::INTERNAL_SERVER_ERROR
 );
 
-pub trait HtmlResponseError: ResponseError {
-    fn status_code(&self) -> StatusCode {
-        StatusCode::INTERNAL_SERVER_ERROR
-    }
-
-    fn error_response(&self) -> HttpResponse {
-        let mut resp = HttpResponse::new(HtmlResponseError::status_code(self));
-        let mut buf = web::BytesMut::new();
-        let _ = write!(&mut buf, "{self}");
-        resp.headers_mut().insert(
-            header::CONTENT_TYPE,
-            header::HeaderValue::from_static("text/html; charset=utf-8"),
-        );
-        resp.set_body(BoxBody::new(buf))
-    }
-}
