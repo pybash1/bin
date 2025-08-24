@@ -6,13 +6,13 @@ mod io;
 mod params;
 
 use crate::{
-    errors::NotFound,
+    errors::{NotFound, Unauthorized},
     io::{PasteStore, generate_id, get_all_paste_ids, get_paste, store_paste},
     params::HostHeader,
 };
 
 use actix_web::{
-    App, Error, HttpRequest, HttpResponse, HttpServer, Responder,
+    App, Error, HttpRequest, HttpResponse, HttpServer,
     http::header,
     web::{self, Bytes, Data, FormConfig, PayloadConfig},
 };
@@ -36,16 +36,35 @@ pub struct BinArgs {
     max_paste_size: usize,
 }
 
+fn check_auth(req: &HttpRequest, required_password: &Option<String>) -> Result<(), Unauthorized> {
+    if let Some(password) = required_password {
+        if let Some(header_value) = req.headers().get("App-Password") {
+            if let Ok(provided_password) = header_value.to_str() {
+                if provided_password == password {
+                    return Ok(());
+                }
+            }
+        }
+        Err(Unauthorized)
+    } else {
+        Ok(())
+    }
+}
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
+    dotenv::dotenv().ok();
+    
     pretty_env_logger::formatted_builder()
         .filter_level(log::LevelFilter::Info)
         .parse_default_env()
         .init();
 
     let args: BinArgs = argh::from_env();
+    let password = std::env::var("APP_PASSWORD").ok();
 
     let store = Data::new(PasteStore::default());
+    let auth_config = Data::new(password);
 
     let server = HttpServer::new({
         let args = args.clone();
@@ -53,6 +72,7 @@ async fn main() -> std::io::Result<()> {
         move || {
             App::new()
                 .app_data(store.clone())
+                .app_data(auth_config.clone())
                 .app_data(PayloadConfig::default().limit(args.max_paste_size))
                 .app_data(FormConfig::default().limit(args.max_paste_size))
                 .wrap(actix_web::middleware::Compress::default())
@@ -122,7 +142,12 @@ async fn index() -> Result<HttpResponse, Error> {
     Ok(HttpResponse::Ok().json(response))
 }
 
-async fn list_all_pastes(store: Data<PasteStore>) -> Result<HttpResponse, Error> {
+async fn list_all_pastes(
+    req: HttpRequest,
+    store: Data<PasteStore>,
+    auth_config: Data<Option<String>>,
+) -> Result<HttpResponse, Error> {
+    check_auth(&req, &auth_config)?;
     let paste_ids = get_all_paste_ids(&store);
     Ok(HttpResponse::Ok().json(paste_ids))
 }
@@ -132,20 +157,29 @@ struct IndexForm {
     val: Bytes,
 }
 
-async fn submit(input: web::Form<IndexForm>, store: Data<PasteStore>) -> impl Responder {
+async fn submit(
+    req: HttpRequest,
+    input: web::Form<IndexForm>,
+    store: Data<PasteStore>,
+    auth_config: Data<Option<String>>,
+) -> Result<HttpResponse, Error> {
+    check_auth(&req, &auth_config)?;
     let id = generate_id();
     let uri = format!("/{id}");
     store_paste(&store, id, input.into_inner().val);
-    HttpResponse::Found()
+    Ok(HttpResponse::Found()
         .append_header((header::LOCATION, uri))
-        .finish()
+        .finish())
 }
 
 async fn submit_raw(
+    req: HttpRequest,
     data: Bytes,
     host: HostHeader,
     store: Data<PasteStore>,
+    auth_config: Data<Option<String>>,
 ) -> Result<String, Error> {
+    check_auth(&req, &auth_config)?;
     let id = generate_id();
     let uri = if let Some(Ok(host)) = host.0.as_ref().map(|v| std::str::from_utf8(v.as_bytes())) {
         format!("https://{host}/{id}\n")
@@ -160,9 +194,12 @@ async fn submit_raw(
 
 
 async fn show_paste(
+    req: HttpRequest,
     key: actix_web::web::Path<String>,
     store: Data<PasteStore>,
+    auth_config: Data<Option<String>>,
 ) -> Result<HttpResponse, Error> {
+    check_auth(&req, &auth_config)?;
     let mut splitter = key.splitn(2, '.');
     let key = splitter.next().unwrap();
     let _ext = splitter.next();

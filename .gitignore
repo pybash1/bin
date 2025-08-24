@@ -11,3 +11,6 @@ result
 
 # The binary
 bin
+
+# Environment variables
+.env

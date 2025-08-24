@@ -43,3 +43,8 @@ impl_response_error_for_json!(
     StatusCode::INTERNAL_SERVER_ERROR
 );
 
+#[derive(Debug)]
+pub struct Unauthorized;
+
+impl_response_error_for_json!(Unauthorized, "Unauthorized", StatusCode::UNAUTHORIZED);
+
