@@ -1,4 +1,4 @@
-version: '3'
+version: "3"
 services:
   bin:
     build:
@@ -10,3 +10,17 @@ services:
       - .env
     environment:
       - APP_PASSWORD=${APP_PASSWORD}
+    networks:
+      - reverse_proxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.bin.rule=Host(`bin.grasslabs.dev`)"
+      - "traefik.http.routers.bin.entrypoints=web,websecure"
+      - "traefik.http.routers.bin.tls.certresolver=myresolver"
+      - "traefik.http.services.bin.loadbalancer.server.port=8000"
+      - "traefik.docker.network=reverse_proxy"
+    restart: unless-stopped
+
+networks:
+  reverse_proxy:
+    external: true
