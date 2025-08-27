@@ -149,23 +149,12 @@ async fn generate_device_code(
     req: HttpRequest,
     store: Data<PasteStore>,
     auth_config: Data<Option<String>>,
-) -> Result<HttpResponse, Error> {
+) -> Result<String, Error> {
     check_auth(&req, auth_config.as_deref())?;
     
     let device_code = generate_unique_device_code(&store);
     
-    #[derive(serde::Serialize)]
-    struct DeviceCodeResponse {
-        device_code: String,
-        message: String,
-    }
-    
-    let response = DeviceCodeResponse {
-        device_code,
-        message: "Store this device code securely. Use it in the Device-Code header for all requests.".to_string(),
-    };
-    
-    Ok(HttpResponse::Ok().json(response))
+    Ok(device_code)
 }
 
 async fn list_all_pastes(
