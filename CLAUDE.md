@@ -49,12 +49,11 @@ The application is structured as a simple REST API with the following key compon
 - `GET /all` - List all paste IDs (JSON)
 - `POST /` - Create paste from form data (redirects to paste URL)
 - `PUT /` - Create paste from raw data (returns paste URL)
-- `GET /{paste_id}[.ext]` - Retrieve paste content (optional extension for syntax highlighting)
+- `GET /{paste_id}` - Retrieve paste content
 
 ### Key Implementation Details
 
 - Uses `parking_lot::RwLock` for thread-safe paste storage
 - Supports both form-based and raw data paste creation
-- File extensions in URLs are parsed but only used for client-side highlighting
 - Host header detection for generating full URLs in PUT responses
 - User-Agent detection for plaintext vs. JSON responses

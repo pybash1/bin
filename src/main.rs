@@ -6,9 +6,9 @@ mod io;
 mod params;
 
 use crate::{
-    errors::{NotFound, Unauthorized},
-    io::{PasteStore, generate_id, get_all_paste_ids, get_paste, store_paste},
-    params::HostHeader,
+    errors::{BadRequest, NotFound, Unauthorized},
+    io::{PasteStore, generate_id, generate_unique_device_code, get_all_paste_ids, get_paste, store_paste},
+    params::{DeviceCode, HostHeader},
 };
 
 use actix_web::{
@@ -28,15 +28,12 @@ pub struct BinArgs {
         default = "SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8820)"
     )]
     bind_addr: SocketAddr,
-    /// maximum amount of pastes to store before rotating (default: 1000)
-    #[argh(option, default = "1000")]
-    buffer_size: usize,
     /// maximum paste size in bytes (default. 32kB)
     #[argh(option, default = "32 * 1024")]
     max_paste_size: usize,
 }
 
-fn check_auth(req: &HttpRequest, required_password: &Option<String>) -> Result<(), Unauthorized> {
+fn check_auth(req: &HttpRequest, required_password: Option<&str>) -> Result<(), Unauthorized> {
     if let Some(password) = required_password {
         if let Some(header_value) = req.headers().get("App-Password") {
             if let Ok(provided_password) = header_value.to_str() {
@@ -77,6 +74,7 @@ async fn main() -> std::io::Result<()> {
                 .app_data(FormConfig::default().limit(args.max_paste_size))
                 .wrap(actix_web::middleware::Compress::default())
                 .route("/", web::get().to(index))
+                .route("/device", web::post().to(generate_device_code))
                 .route("/all", web::get().to(list_all_pastes))
                 .route("/", web::post().to(submit))
                 .route("/", web::put().to(submit_raw))
@@ -128,9 +126,14 @@ async fn index() -> Result<HttpResponse, Error> {
                 description: "Create a new paste (raw data)".to_string(),
             },
             ApiEndpoint {
+                method: "POST".to_string(),
+                path: "/device".to_string(),
+                description: "Generate a unique device code".to_string(),
+            },
+            ApiEndpoint {
                 method: "GET".to_string(),
                 path: "/all".to_string(),
-                description: "Get all paste IDs".to_string(),
+                description: "Get all paste IDs for your device".to_string(),
             },
             ApiEndpoint {
                 method: "GET".to_string(),
@@ -142,13 +145,39 @@ async fn index() -> Result<HttpResponse, Error> {
     Ok(HttpResponse::Ok().json(response))
 }
 
-async fn list_all_pastes(
+async fn generate_device_code(
     req: HttpRequest,
     store: Data<PasteStore>,
     auth_config: Data<Option<String>>,
 ) -> Result<HttpResponse, Error> {
-    check_auth(&req, &auth_config)?;
-    let paste_ids = get_all_paste_ids(&store);
+    check_auth(&req, auth_config.as_deref())?;
+    
+    let device_code = generate_unique_device_code(&store);
+    
+    #[derive(serde::Serialize)]
+    struct DeviceCodeResponse {
+        device_code: String,
+        message: String,
+    }
+    
+    let response = DeviceCodeResponse {
+        device_code,
+        message: "Store this device code securely. Use it in the Device-Code header for all requests.".to_string(),
+    };
+    
+    Ok(HttpResponse::Ok().json(response))
+}
+
+async fn list_all_pastes(
+    req: HttpRequest,
+    device_code: DeviceCode,
+    store: Data<PasteStore>,
+    auth_config: Data<Option<String>>,
+) -> Result<HttpResponse, Error> {
+    check_auth(&req, auth_config.as_deref())?;
+    
+    let device_code = device_code.0.ok_or(BadRequest)?;
+    let paste_ids = get_all_paste_ids(&store, &device_code);
     Ok(HttpResponse::Ok().json(paste_ids))
 }
 
@@ -160,13 +189,16 @@ struct IndexForm {
 async fn submit(
     req: HttpRequest,
     input: web::Form<IndexForm>,
+    device_code: DeviceCode,
     store: Data<PasteStore>,
     auth_config: Data<Option<String>>,
 ) -> Result<HttpResponse, Error> {
-    check_auth(&req, &auth_config)?;
+    check_auth(&req, auth_config.as_deref())?;
+    
+    let device_code = device_code.0.ok_or(BadRequest)?;
     let id = generate_id();
     let uri = format!("/{id}");
-    store_paste(&store, id, input.into_inner().val);
+    store_paste(&store, id, input.into_inner().val, device_code);
     Ok(HttpResponse::Found()
         .append_header((header::LOCATION, uri))
         .finish())
@@ -176,10 +208,13 @@ async fn submit_raw(
     req: HttpRequest,
     data: Bytes,
     host: HostHeader,
+    device_code: DeviceCode,
     store: Data<PasteStore>,
     auth_config: Data<Option<String>>,
 ) -> Result<String, Error> {
-    check_auth(&req, &auth_config)?;
+    check_auth(&req, auth_config.as_deref())?;
+    
+    let device_code = device_code.0.ok_or(BadRequest)?;
     let id = generate_id();
     let uri = if let Some(Ok(host)) = host.0.as_ref().map(|v| std::str::from_utf8(v.as_bytes())) {
         format!("https://{host}/{id}\n")
@@ -187,7 +222,7 @@ async fn submit_raw(
         format!("/{id}\n")
     };
 
-    store_paste(&store, id, data);
+    store_paste(&store, id, data, device_code);
 
     Ok(uri)
 }
@@ -196,15 +231,18 @@ async fn submit_raw(
 async fn show_paste(
     req: HttpRequest,
     key: actix_web::web::Path<String>,
+    device_code: DeviceCode,
     store: Data<PasteStore>,
     auth_config: Data<Option<String>>,
 ) -> Result<HttpResponse, Error> {
-    check_auth(&req, &auth_config)?;
+    check_auth(&req, auth_config.as_deref())?;
+    
+    let device_code = device_code.0.ok_or(BadRequest)?;
     let mut splitter = key.splitn(2, '.');
     let key = splitter.next().unwrap();
     let _ext = splitter.next();
 
-    let entry = get_paste(&store, key).ok_or(NotFound)?;
+    let entry = get_paste(&store, key, &device_code).ok_or(Unauthorized)?;
 
     Ok(HttpResponse::Ok()
         .content_type("text/plain; charset=utf-8")

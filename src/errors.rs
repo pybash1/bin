@@ -48,3 +48,8 @@ pub struct Unauthorized;
 
 impl_response_error_for_json!(Unauthorized, "Unauthorized", StatusCode::UNAUTHORIZED);
 
+#[derive(Debug)]
+pub struct BadRequest;
+
+impl_response_error_for_json!(BadRequest, "Bad Request", StatusCode::BAD_REQUEST);
+

@@ -55,3 +55,27 @@ impl FromRequest for HostHeader {
         ok(Self(req.headers().get(header::HOST).cloned()))
     }
 }
+
+/// Gets the Device-Code header from the request.
+///
+/// The inner value will be `None` if there was no Device-Code header or if it's invalid.
+/// Valid device codes are 8 character alphanumeric (A-Z, 0-9) strings.
+pub struct DeviceCode(pub Option<String>);
+
+impl FromRequest for DeviceCode {
+    type Error = actix_web::Error;
+    type Future = futures::future::Ready<Result<Self, Self::Error>>;
+
+    fn from_request(req: &HttpRequest, _payload: &mut Payload) -> Self::Future {
+        let device_code = req
+            .headers()
+            .get("Device-Code")
+            .and_then(|h| h.to_str().ok())
+            .filter(|code| {
+                code.len() == 8 && code.chars().all(|c| c.is_ascii_alphanumeric() && (c.is_ascii_uppercase() || c.is_ascii_digit()))
+            })
+            .map(String::from);
+        
+        ok(Self(device_code))
+    }
+}
