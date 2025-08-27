@@ -1,13 +1,10 @@
-FROM rust:1-alpine AS builder
-RUN apk add --no-cache musl-dev
+FROM scratch
 
 COPY . /sources
 WORKDIR /sources
-RUN cargo build --release
-RUN chown nobody:nogroup /sources/target/release/bin
+RUN chown nobody:nogroup /sources/bin
 
-FROM scratch
-COPY --from=builder /sources/target/release/bin /pastebin
+COPY --from=builder /sources/bin /pastebin
 COPY --from=builder /etc/passwd /etc/passwd
 
 USER nobody

@@ -9,8 +9,5 @@
 **/*.rs.bk
 result
 
-# The binary
-bin
-
 # Environment variables
 .env
