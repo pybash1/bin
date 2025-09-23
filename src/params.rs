@@ -41,23 +41,44 @@ impl FromRequest for HostHeader {
     }
 }
 
-pub struct DeviceCode(pub Option<String>);
+pub struct DeviceFingerprint(pub Option<String>);
 
-impl FromRequest for DeviceCode {
+impl FromRequest for DeviceFingerprint {
     type Error = actix_web::Error;
     type Future = futures::future::Ready<Result<Self, Self::Error>>;
 
     fn from_request(req: &HttpRequest, _payload: &mut Payload) -> Self::Future {
-        let device_code = req
+        let device_fingerprint = req
             .headers()
-            .get("Device-Code")
+            .get("Device-Fingerprint")
             .and_then(|h| h.to_str().ok())
-            .filter(|code| {
-                code.len() == 8 && 
-                code.chars().all(|c| c.is_ascii_alphanumeric() && (c.is_ascii_uppercase() || c.is_ascii_digit()))
+            .filter(|fingerprint| {
+                fingerprint.len() == 8 && 
+                fingerprint.chars().all(|c| c.is_ascii_hexdigit() && (c.is_ascii_uppercase() || c.is_ascii_digit()))
             })
             .map(String::from);
         
-        ready(Ok(Self(device_code)))
+        ready(Ok(Self(device_fingerprint)))
+    }
+}
+
+pub struct AccountHash(pub Option<String>);
+
+impl FromRequest for AccountHash {
+    type Error = actix_web::Error;
+    type Future = futures::future::Ready<Result<Self, Self::Error>>;
+
+    fn from_request(req: &HttpRequest, _payload: &mut Payload) -> Self::Future {
+        let account_hash = req
+            .headers()
+            .get("Account-Hash")
+            .and_then(|h| h.to_str().ok())
+            .filter(|hash| {
+                hash.len() == 16 && 
+                hash.chars().all(|c| c.is_ascii_hexdigit() && (c.is_ascii_uppercase() || c.is_ascii_digit()))
+            })
+            .map(String::from);
+        
+        ready(Ok(Self(account_hash)))
     }
 }
