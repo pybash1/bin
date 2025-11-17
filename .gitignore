@@ -11,3 +11,7 @@ result
 
 # Environment variables
 .env
+
+# Binaries
+Dockerfile.builder
+dist/
