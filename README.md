@@ -1,4 +1,16 @@
 # bin
+
+this is a extensively modified version of the original bin server for use as a simple api for board. changes include, authentication, removal of all gui elements, and encryption of stored pastes(server never sees plaintext).
+
+### can i self host it?
+
+yes, this version can also be self hosted(it is just a simple binary). however, the client applications do not yet support custom endpoints(i'm working on it).
+
+### other details
+
+i've tried to utilise as much of the original code as possible, so credits to the original author jordan jd for making such a clean and simple pastebin server. i've tried to keep the LoC additions to a minimum(~321 lines) even while inserting new logic as required.
+
+# originally by Jordan JD
 a paste bin.
 
 A paste bin that's actually minimalist. No database requirement, no commenting functionality, no self-destructing or time bomb messages and no social media integration—just an application to quickly send snippets of text to people.
