@@ -7,11 +7,15 @@ mod params;
 
 use crate::{
     errors::{BadRequest, NotFound, Unauthorized},
-    io::{PasteStore, generate_id, generate_unique_device_code, get_all_paste_ids, get_paste, store_paste},
+    io::{
+        PasteStore, generate_id, generate_unique_device_code, get_all_paste_ids, get_paste,
+        store_paste,
+    },
     params::{DeviceCode, HostHeader},
 };
 use actix_web::{
-    App, Error, HttpRequest, HttpResponse, HttpServer, http::header,
+    App, Error, HttpRequest, HttpResponse, HttpServer,
+    http::header,
     web::{self, Bytes, Data, FormConfig, PayloadConfig},
 };
 use log::{error, info};
@@ -20,7 +24,10 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 #[derive(argh::FromArgs, Clone)]
 /// arguments
 pub struct BinArgs {
-    #[argh(positional, default = "SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8820)")]
+    #[argh(
+        positional,
+        default = "SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8820)"
+    )]
     bind_addr: SocketAddr,
     #[argh(option, default = "32 * 1024")]
     /// max paste size (32kb)
@@ -38,7 +45,7 @@ fn check_auth(req: &HttpRequest, password: Option<&str>) -> Result<(), Unauthori
 }
 
 #[actix_web::main]
-async fn main() -> std::io::Result<()> { 
+async fn main() -> std::io::Result<()> {
     dotenv::dotenv().ok();
     pretty_env_logger::formatted_builder()
         .filter_level(log::LevelFilter::Info)
@@ -90,14 +97,38 @@ struct ApiEndpoint {
 }
 
 static API_INFO: ApiInfo = ApiInfo {
-    message: "Bin API - A pastebin service",
+    message: "Bin(modified for Board)",
     endpoints: &[
-        ApiEndpoint { method: "GET", path: "/", description: "Get API information" },
-        ApiEndpoint { method: "POST", path: "/", description: "Create a new paste (form data)" },
-        ApiEndpoint { method: "PUT", path: "/", description: "Create a new paste (raw data)" },
-        ApiEndpoint { method: "POST", path: "/device", description: "Generate a unique device code" },
-        ApiEndpoint { method: "GET", path: "/all", description: "Get all paste IDs for your device" },
-        ApiEndpoint { method: "GET", path: "/{paste}", description: "Get paste content by ID" },
+        ApiEndpoint {
+            method: "GET",
+            path: "/",
+            description: "Get API information",
+        },
+        ApiEndpoint {
+            method: "POST",
+            path: "/",
+            description: "Create a new paste (form data)",
+        },
+        ApiEndpoint {
+            method: "PUT",
+            path: "/",
+            description: "Create a new paste (raw data)",
+        },
+        ApiEndpoint {
+            method: "POST",
+            path: "/device",
+            description: "Generate a unique device code",
+        },
+        ApiEndpoint {
+            method: "GET",
+            path: "/all",
+            description: "Get all paste IDs for your device",
+        },
+        ApiEndpoint {
+            method: "GET",
+            path: "/{paste}",
+            description: "Get paste content by ID",
+        },
     ],
 };
 
@@ -158,7 +189,7 @@ async fn submit_raw(
     check_auth(&req, auth_config.as_deref())?;
     let device_code = device_code.0.ok_or(BadRequest)?;
     let id = generate_id();
-    
+
     let uri = match &host.0 {
         Some(host_header) => {
             if let Ok(host_str) = std::str::from_utf8(host_header.as_bytes()) {
@@ -174,7 +205,6 @@ async fn submit_raw(
     Ok(uri)
 }
 
-
 async fn show_paste(
     req: HttpRequest,
     key: actix_web::web::Path<String>,
@@ -186,10 +216,8 @@ async fn show_paste(
     let device_code = device_code.0.ok_or(BadRequest)?;
     let paste_id = key.split('.').next().unwrap();
     let content = get_paste(&store, paste_id, &device_code).ok_or(Unauthorized)?;
-    
+
     Ok(HttpResponse::Ok()
         .content_type("text/plain; charset=utf-8")
         .body(content))
 }
-
-

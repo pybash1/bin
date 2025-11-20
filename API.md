@@ -4,7 +4,7 @@ This document provides a detailed description of the `bin` API, designed for eas
 
 ## Overview
 
-`bin` is a minimalist pastebin service. It allows users to store and share snippets of text. The API is designed to be simple and straightforward.
+`bin` is a minimalist pastebin service modified for Board. It allows users to store and share snippets of text. The API is designed to be simple and straightforward.
 
 ## Authentication & Authorization
 
@@ -38,7 +38,7 @@ This document provides a detailed description of the `bin` API, designed for eas
   - **Content**: A JSON object describing the API.
   ```json
   {
-    "message": "Bin API - A pastebin service",
+    "message": "Bin(modified for Board)",
     "endpoints": [
       { "method": "GET", "path": "/", "description": "Get API information" },
       { "method": "POST", "path": "/", "description": "Create a new paste (form data)" },
