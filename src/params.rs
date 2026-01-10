@@ -1,9 +1,10 @@
-use std::ops::Deref;
 use actix_web::{
-    FromRequest, HttpRequest, HttpMessage, dev::Payload,
+    FromRequest, HttpMessage, HttpRequest,
+    dev::Payload,
     http::header::{self, HeaderValue},
 };
 use futures::future::ready;
+use std::ops::Deref;
 
 pub struct IsPlaintextRequest(pub bool);
 
@@ -19,13 +20,14 @@ impl FromRequest for IsPlaintextRequest {
     type Future = futures::future::Ready<Result<Self, Self::Error>>;
 
     fn from_request(req: &HttpRequest, _payload: &mut Payload) -> Self::Future {
-        let is_plaintext = req.content_type() == "text/plain" || 
-            req.headers()
+        let is_plaintext = req.content_type() == "text/plain"
+            || req
+                .headers()
                 .get(header::USER_AGENT)
                 .and_then(|u| u.to_str().ok())
                 .and_then(|s| s.split('/').next())
                 .is_none_or(|agent| matches!(agent, "Wget" | "curl" | "HTTPie"));
-        
+
         ready(Ok(IsPlaintextRequest(is_plaintext)))
     }
 }
@@ -53,11 +55,13 @@ impl FromRequest for DeviceCode {
             .get("Device-Code")
             .and_then(|h| h.to_str().ok())
             .filter(|code| {
-                code.len() == 8 && 
-                code.chars().all(|c| c.is_ascii_alphanumeric() && (c.is_ascii_uppercase() || c.is_ascii_digit()))
+                code.len() == 8
+                    && code.chars().all(|c| {
+                        c.is_ascii_alphanumeric() && (c.is_ascii_uppercase() || c.is_ascii_digit())
+                    })
             })
             .map(String::from);
-        
+
         ready(Ok(Self(device_code)))
     }
 }

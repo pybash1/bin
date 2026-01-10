@@ -1,12 +1,13 @@
 #![deny(clippy::pedantic)]
 #![allow(clippy::unused_async)]
+#![allow(clippy::needless_for_each)] // Required for utoipa::OpenApi derive macro
 
 mod errors;
 mod io;
 mod params;
 
 use crate::{
-    errors::{BadRequest, NotFound, Unauthorized},
+    errors::{BadRequest, ErrorResponse, NotFound, Unauthorized},
     io::{
         PasteStore, generate_id, generate_unique_device_code, get_all_paste_ids, get_paste,
         store_paste,
@@ -20,6 +21,25 @@ use actix_web::{
 };
 use log::{error, info};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use utoipa::OpenApi;
+
+/// `OpenAPI` documentation
+#[derive(OpenApi)]
+#[openapi(
+    info(
+        title = "Bin (Board Modified)",
+        version = "2.0.2",
+        description = "A minimalist pastebin API modified for Board. Device-based storage with authentication."
+    ),
+    paths(index, openapi_spec, generate_device_code, list_all_pastes, submit, submit_raw, show_paste),
+    components(schemas(ApiInfo, ApiEndpoint, ErrorResponse)),
+    tags(
+        (name = "info", description = "API information endpoints"),
+        (name = "device", description = "Device management endpoints"),
+        (name = "paste", description = "Paste management endpoints")
+    )
+)]
+struct ApiDoc;
 
 #[derive(argh::FromArgs, Clone)]
 /// arguments
@@ -67,6 +87,7 @@ async fn main() -> std::io::Result<()> {
                 .app_data(FormConfig::default().limit(args.max_paste_size))
                 .wrap(actix_web::middleware::Compress::default())
                 .route("/", web::get().to(index))
+                .route("/openapi.json", web::get().to(openapi_spec))
                 .route("/device", web::post().to(generate_device_code))
                 .route("/all", web::get().to(list_all_pastes))
                 .route("/", web::post().to(submit))
@@ -83,16 +104,21 @@ async fn main() -> std::io::Result<()> {
     server.bind(args.bind_addr)?.run().await
 }
 
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, utoipa::ToSchema)]
 struct ApiInfo {
+    /// Welcome message
     message: &'static str,
+    /// List of available API endpoints
     endpoints: &'static [ApiEndpoint],
 }
 
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, utoipa::ToSchema)]
 struct ApiEndpoint {
+    /// HTTP method
     method: &'static str,
+    /// URL path
     path: &'static str,
+    /// Endpoint description
     description: &'static str,
 }
 
@@ -132,10 +158,45 @@ static API_INFO: ApiInfo = ApiInfo {
     ],
 };
 
+/// Get API information
+#[utoipa::path(
+    get,
+    path = "/",
+    tag = "info",
+    responses(
+        (status = 200, description = "API information", body = ApiInfo)
+    )
+)]
 async fn index() -> Result<HttpResponse, Error> {
     Ok(HttpResponse::Ok().json(&API_INFO))
 }
 
+/// Get `OpenAPI` specification
+#[utoipa::path(
+    get,
+    path = "/openapi.json",
+    tag = "info",
+    responses(
+        (status = 200, description = "OpenAPI specification", content_type = "application/json")
+    )
+)]
+async fn openapi_spec() -> HttpResponse {
+    HttpResponse::Ok().json(ApiDoc::openapi())
+}
+
+/// Generate a unique device code
+#[utoipa::path(
+    post,
+    path = "/device",
+    tag = "device",
+    responses(
+        (status = 200, description = "Generated device code (8 alphanumeric uppercase characters)", body = String),
+        (status = 401, description = "Unauthorized - invalid or missing App-Password", body = ErrorResponse)
+    ),
+    security(
+        ("app_password" = [])
+    )
+)]
 async fn generate_device_code(
     req: HttpRequest,
     store: Data<PasteStore>,
@@ -145,6 +206,23 @@ async fn generate_device_code(
     Ok(generate_unique_device_code(&store))
 }
 
+/// List all paste IDs for the authenticated device
+#[utoipa::path(
+    get,
+    path = "/all",
+    tag = "paste",
+    responses(
+        (status = 200, description = "List of paste IDs owned by the device", body = Vec<String>),
+        (status = 400, description = "Bad request - missing Device-Code header", body = ErrorResponse),
+        (status = 401, description = "Unauthorized - invalid or missing App-Password", body = ErrorResponse)
+    ),
+    params(
+        ("Device-Code" = String, Header, description = "8-character alphanumeric device identifier")
+    ),
+    security(
+        ("app_password" = [])
+    )
+)]
 async fn list_all_pastes(
     req: HttpRequest,
     device_code: DeviceCode,
@@ -157,11 +235,31 @@ async fn list_all_pastes(
     Ok(HttpResponse::Ok().json(paste_ids))
 }
 
-#[derive(serde::Deserialize)]
+#[derive(serde::Deserialize, utoipa::ToSchema)]
 struct PasteForm {
+    /// Paste content
+    #[schema(value_type = String)]
     val: Bytes,
 }
 
+/// Create a new paste from form data
+#[utoipa::path(
+    post,
+    path = "/",
+    tag = "paste",
+    request_body(content = PasteForm, content_type = "application/x-www-form-urlencoded"),
+    responses(
+        (status = 302, description = "Redirect to the created paste URL"),
+        (status = 400, description = "Bad request - missing Device-Code header", body = ErrorResponse),
+        (status = 401, description = "Unauthorized - invalid or missing App-Password", body = ErrorResponse)
+    ),
+    params(
+        ("Device-Code" = String, Header, description = "8-character alphanumeric device identifier")
+    ),
+    security(
+        ("app_password" = [])
+    )
+)]
 async fn submit(
     req: HttpRequest,
     input: web::Form<PasteForm>,
@@ -178,6 +276,24 @@ async fn submit(
         .finish())
 }
 
+/// Create a new paste from raw data
+#[utoipa::path(
+    put,
+    path = "/",
+    tag = "paste",
+    request_body(content = String, content_type = "text/plain", description = "Raw paste content"),
+    responses(
+        (status = 200, description = "URL of the created paste", body = String),
+        (status = 400, description = "Bad request - missing Device-Code header", body = ErrorResponse),
+        (status = 401, description = "Unauthorized - invalid or missing App-Password", body = ErrorResponse)
+    ),
+    params(
+        ("Device-Code" = String, Header, description = "8-character alphanumeric device identifier")
+    ),
+    security(
+        ("app_password" = [])
+    )
+)]
 async fn submit_raw(
     req: HttpRequest,
     data: Bytes,
@@ -205,6 +321,24 @@ async fn submit_raw(
     Ok(uri)
 }
 
+/// Get paste content by ID
+#[utoipa::path(
+    get,
+    path = "/{paste}",
+    tag = "paste",
+    responses(
+        (status = 200, description = "Paste content", content_type = "text/plain"),
+        (status = 400, description = "Bad request - missing Device-Code header", body = ErrorResponse),
+        (status = 401, description = "Unauthorized - paste not owned by this device or invalid App-Password", body = ErrorResponse)
+    ),
+    params(
+        ("paste" = String, Path, description = "Paste ID (optionally with file extension for syntax highlighting)"),
+        ("Device-Code" = String, Header, description = "8-character alphanumeric device identifier")
+    ),
+    security(
+        ("app_password" = [])
+    )
+)]
 async fn show_paste(
     req: HttpRequest,
     key: actix_web::web::Path<String>,

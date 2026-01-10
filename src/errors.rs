@@ -1,10 +1,13 @@
 use actix_web::{HttpResponse, ResponseError, http::StatusCode};
 use serde::Serialize;
 use std::fmt::{self, Formatter};
+use utoipa::ToSchema;
 
-#[derive(Serialize)]
-struct ErrorResponse {
+#[derive(Serialize, ToSchema)]
+pub struct ErrorResponse {
+    /// Error message
     error: &'static str,
+    /// HTTP status code
     status: u16,
 }
 
@@ -33,4 +36,3 @@ macro_rules! error_type {
 error_type!(NotFound, "Not Found", StatusCode::NOT_FOUND);
 error_type!(Unauthorized, "Unauthorized", StatusCode::UNAUTHORIZED);
 error_type!(BadRequest, "Bad Request", StatusCode::BAD_REQUEST);
-

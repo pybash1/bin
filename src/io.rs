@@ -12,7 +12,7 @@ pub struct Paste {
 
 pub type PasteStore = RwLock<LinkedHashMap<String, Paste>>;
 
-const DEVICE_PASTE_LIMIT: usize = 2; 
+const DEVICE_PASTE_LIMIT: usize = 2;
 
 fn purge_old_device_pastes(entries: &mut LinkedHashMap<String, Paste>, device_code: &str) {
     let device_paste_ids: Vec<String> = entries
@@ -21,7 +21,9 @@ fn purge_old_device_pastes(entries: &mut LinkedHashMap<String, Paste>, device_co
         .map(|(id, _)| id.clone())
         .collect();
 
-    let to_remove = device_paste_ids.len().saturating_sub(DEVICE_PASTE_LIMIT - 1);
+    let to_remove = device_paste_ids
+        .len()
+        .saturating_sub(DEVICE_PASTE_LIMIT - 1);
     for id in device_paste_ids.into_iter().take(to_remove) {
         entries.remove(&id);
     }
@@ -42,13 +44,20 @@ pub fn generate_id() -> String {
 pub fn store_paste(store: &PasteStore, id: String, content: Bytes, device_code: String) {
     let mut entries = store.write();
     purge_old_device_pastes(&mut entries, &device_code);
-    entries.insert(id, Paste { content, device_code });
+    entries.insert(
+        id,
+        Paste {
+            content,
+            device_code,
+        },
+    );
 }
 
 pub fn get_paste(store: &PasteStore, id: &str, device_code: &str) -> Option<Bytes> {
-    store.read().get(id).and_then(|paste| {
-        (paste.device_code == device_code).then(|| paste.content.clone())
-    })
+    store
+        .read()
+        .get(id)
+        .and_then(|paste| (paste.device_code == device_code).then(|| paste.content.clone()))
 }
 
 pub fn get_all_paste_ids(store: &PasteStore, device_code: &str) -> Vec<String> {
