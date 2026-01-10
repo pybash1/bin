@@ -21,7 +21,10 @@ use actix_web::{
 };
 use log::{error, info};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use utoipa::OpenApi;
+use utoipa::{
+    Modify, OpenApi,
+    openapi::security::{ApiKey, ApiKeyValue, SecurityScheme},
+};
 
 /// `OpenAPI` documentation
 #[derive(OpenApi)]
@@ -33,6 +36,7 @@ use utoipa::OpenApi;
     ),
     paths(index, openapi_spec, generate_device_code, list_all_pastes, submit, submit_raw, show_paste),
     components(schemas(ApiInfo, ApiEndpoint, ErrorResponse)),
+    modifiers(&SecurityAddon),
     tags(
         (name = "info", description = "API information endpoints"),
         (name = "device", description = "Device management endpoints"),
@@ -40,6 +44,19 @@ use utoipa::OpenApi;
     )
 )]
 struct ApiDoc;
+
+struct SecurityAddon;
+
+impl Modify for SecurityAddon {
+    fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
+        if let Some(components) = openapi.components.as_mut() {
+            components.add_security_scheme(
+                "app_password",
+                SecurityScheme::ApiKey(ApiKey::Header(ApiKeyValue::new("App-Password"))),
+            );
+        }
+    }
+}
 
 #[derive(argh::FromArgs, Clone)]
 /// arguments
