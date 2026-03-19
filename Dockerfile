@@ -1,17 +1,22 @@
-# Use minimal Alpine image
+# Build stage
+FROM rust:1.75-alpine AS builder
+
+WORKDIR /build
+
+COPY Cargo.toml Cargo.lock* ./
+COPY src ./src
+
+RUN apk add --no-cache musl-dev
+RUN cargo build --release
+
+# Runtime stage
 FROM alpine:3.18
 
-# Install CA certificates for HTTPS
 RUN apk add --no-cache ca-certificates
 
-# Copy the pre-built binary from project root
-COPY bin /usr/local/bin/pastebin
-
-# Make the binary executable
+COPY --from=builder /build/target/release/bin-mod-board /usr/local/bin/pastebin
 RUN chmod +x /usr/local/bin/pastebin
 
-# Expose port
 EXPOSE 8000
 
-# Run the binary
 ENTRYPOINT ["/usr/local/bin/pastebin", "0.0.0.0:8000"]

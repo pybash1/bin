@@ -1,2 +1,9 @@
 target
-Dockerfile
+.git
+.env
+.env.*
+*.md
+Dockerfile*
+.dockerignore
+.gitignore
+*.log
