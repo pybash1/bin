@@ -83,7 +83,7 @@ fn check_auth(req: &HttpRequest, password: Option<&str>) -> Result<(), Unauthori
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    dotenv::dotenv().ok();
+    dotenvy::dotenv().ok();
     pretty_env_logger::formatted_builder()
         .filter_level(log::LevelFilter::Info)
         .parse_default_env()
