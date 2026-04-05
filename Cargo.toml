@@ -19,7 +19,7 @@ rand = "0.9"
 gpw = "0.1"
 actix-web = "4.4"
 futures = "0.3"
-dotenv = "0.15"
+dotenvy = "0.15"
 utoipa = { version = "5", features = ["actix_extras"] }
 utoipa-actix-web = "0.1"
 
